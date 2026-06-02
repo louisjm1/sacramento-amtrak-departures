@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated board image
+board.png
+
+# Cached GTFS feeds (downloaded at runtime, ~6 MB)
+gtfs_cache/
+
+# Secrets — token comes from env or ~/dev/bay-area-transit-map/.env
+.env
