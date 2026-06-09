@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Sacramento Departures</title>
+<style>
+  @font-face {
+    font-family: "ChakraPetch";
+    src: url("/font.ttf") format("truetype");
+    font-weight: normal; font-display: block;
+  }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  /* Drawing buffer is 800x480; CSS scales it to fit the screen, aspect kept. */
+  canvas { background: #000; image-rendering: auto; }
+</style>
+</head>
+<body>
+<canvas id="board" width="800" height="480"></canvas>
+<script>
+// ---- Look: must mirror render_board.py ------------------------------------
+const W = 800, H = 480;
+const AMBER = "#FFC800", RED = "#FF4B23";
+const FONT = "ChakraPetch";
+const TITLE_SIZE = 36, UPD_SIZE = 13, HEAD_SIZE = 20, ROW_SIZE = 24;
+const COL_TIME = 16, COL_ROUTE = 190, COL_TO = 448, RIGHT = W - 16;
+const HEAD_Y = 70, LINE_Y = 100, ROWS_TOP = 112, ROW_H = 44, MAX_ROWS = 8;
+
+// ---- Split-flap behavior --------------------------------------------------
+// Flaps only advance FORWARD through this sequence (like a real Solari board),
+// so the distance from the old glyph to the new one sets how long a cell spins.
+const FLAP = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:+-./→";
+const FLAP_IDX = Object.fromEntries([...FLAP].map((c, i) => [c, i]));
+const MS_PER_FLAP = 38;        // time to advance one glyph
+const STAGGER_MS_PER_PX = 0.7; // left-to-right wave: later columns start later
+
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+
+function fit() {
+  const s = Math.min(window.innerWidth / W, window.innerHeight / H);
+  canvas.style.width = (W * s) + "px";
+  canvas.style.height = (H * s) + "px";
+}
+window.addEventListener("resize", fit);
+fit();
+
+// ---- State ----------------------------------------------------------------
+let shown = {};        // id -> glyph currently settled/displayed
+let cells = [];        // current animation target cells
+let animStart = 0;     // performance.now() when the current animation began
+let animating = false;
+let updatedText = "";
+let lastRowsKey = null;
+
+function setFont(size) { ctx.font = size + "px " + FONT; }
+
+// Turn a list of {t,color} segments into per-character {ch,color}.
+function segChars(segs) {
+  const out = [];
+  for (const s of segs) for (const ch of s.t) out.push({ ch, color: s.color });
+  return out;
+}
+
+// Build the target cells for all rows. Left-aligned fields advance by each
+// TARGET glyph's width so intermediate glyphs sit at the final position.
+function buildCells(rows) {
+  const out = [];
+  setFont(ROW_SIZE);
+  rows.forEach((row, r) => {
+    const y = ROWS_TOP + r * ROW_H;
+    const rowColor = row.late ? RED : AMBER;
+
+    // TIME (left): sched amber, optional " -> revised" with revised in red.
+    let timeChars;
+    if (row.revised) {
+      timeChars = segChars([
+        { t: row.sched, color: AMBER },
+        { t: " → ", color: AMBER },
+        { t: row.revised, color: RED },
+      ]);
+    } else {
+      timeChars = segChars([{ t: row.sched, color: AMBER }]);
+    }
+    pushLeft(out, r, "time", COL_TIME, y, timeChars);
+    pushLeft(out, r, "route", COL_ROUTE, y, strChars(row.route, rowColor));
+    pushLeft(out, r, "dest", COL_TO, y, strChars(row.dest, rowColor));
+    pushRight(out, r, "status", RIGHT, y, strChars(row.status, rowColor));
+  });
+  return out;
+}
+
+function strChars(s, color) { return [...s].map(ch => ({ ch, color })); }
+
+function pushLeft(out, r, field, anchorX, y, chars) {
+  let x = anchorX;
+  chars.forEach((c, i) => {
+    out.push({ id: r + ":" + field + ":" + i, x, y, ch: c.ch, color: c.color });
+    x += ctx.measureText(c.ch).width;
+  });
+}
+
+// Right-aligned: id by index-from-right so trailing glyphs stay put when the
+// string length changes (e.g. "ON TIME" -> "SCHEDULED").
+function pushRight(out, r, field, anchorX, y, chars) {
+  const total = chars.reduce((w, c) => w + ctx.measureText(c.ch).width, 0);
+  let x = anchorX - total;
+  const n = chars.length;
+  chars.forEach((c, i) => {
+    out.push({ id: r + ":" + field + ":R" + (n - 1 - i), x, y, ch: c.ch, color: c.color });
+    x += ctx.measureText(c.ch).width;
+  });
+}
+
+function startAnimation(rows) {
+  cells = buildCells(rows);
+  for (const cell of cells) {
+    const from = shown[cell.id] ?? " ";
+    const sIdx = FLAP_IDX[from] ?? 0;
+    const tIdx = FLAP_IDX[cell.ch];
+    if (tIdx === undefined) {           // glyph outside the flap set: no spin
+      cell.sIdx = 0; cell.steps = 0; cell.fixed = cell.ch;
+    } else {
+      cell.sIdx = sIdx;
+      cell.steps = (tIdx - sIdx + FLAP.length) % FLAP.length;
+    }
+    cell.startAt = cell.x * STAGGER_MS_PER_PX;  // relative to animStart
+  }
+  animStart = performance.now();
+  if (!animating) { animating = true; requestAnimationFrame(frame); }
+}
+
+function drawChrome() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, W, H);
+  ctx.textBaseline = "top";
+  ctx.fillStyle = AMBER;
+
+  ctx.textAlign = "left";
+  setFont(TITLE_SIZE);
+  ctx.fillText("SACRAMENTO DEPARTURES", 16, 10);
+
+  ctx.textAlign = "right";
+  setFont(UPD_SIZE);
+  ctx.fillText(updatedText, RIGHT, 22);
+
+  ctx.textAlign = "left";
+  setFont(HEAD_SIZE);
+  ctx.fillText("DEPART", COL_TIME, HEAD_Y);
+  ctx.fillText("ROUTE", COL_ROUTE, HEAD_Y);
+  ctx.fillText("TO", COL_TO, HEAD_Y);
+  ctx.textAlign = "right";
+  ctx.fillText("STATUS", RIGHT, HEAD_Y);
+
+  ctx.strokeStyle = AMBER; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(12, LINE_Y); ctx.lineTo(W - 12, LINE_Y); ctx.stroke();
+}
+
+function frame(now) {
+  drawChrome();
+  setFont(ROW_SIZE);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+
+  let allSettled = true;
+  for (const cell of cells) {
+    let glyph;
+    if (cell.fixed !== undefined) {
+      glyph = cell.fixed;
+    } else {
+      const t = now - animStart - cell.startAt;
+      let k = t <= 0 ? 0 : Math.floor(t / MS_PER_FLAP);
+      if (k < cell.steps) allSettled = false;
+      k = Math.min(k, cell.steps);
+      glyph = FLAP[(cell.sIdx + k) % FLAP.length];
+    }
+    if (glyph !== " ") { ctx.fillStyle = cell.color; ctx.fillText(glyph, cell.x, cell.y); }
+  }
+
+  if (allSettled) {
+    animating = false;
+    shown = {};
+    for (const cell of cells) shown[cell.id] = (cell.fixed !== undefined ? cell.fixed : cell.ch);
+  } else {
+    requestAnimationFrame(frame);
+  }
+}
+
+// Redraw the settled board without animating (used when only "updated" changed).
+function frameStatic() {
+  setFont(ROW_SIZE); ctx.textAlign = "left"; ctx.textBaseline = "top";
+  for (const cell of cells) {
+    const g = cell.fixed !== undefined ? cell.fixed : cell.ch;
+    if (g !== " ") { ctx.fillStyle = cell.color; ctx.fillText(g, cell.x, cell.y); }
+  }
+}
+
+// Tap / click anywhere to replay the flap (nice on the touchscreen, and a demo).
+canvas.addEventListener("pointerdown", () => {
+  if (cells.length && !animating) { shown = {}; startAnimation(lastRows()); }
+});
+let _lastRows = [];
+function lastRows() { return _lastRows; }
+
+async function loop() {
+  const data = await (await fetch("/data.json", { cache: "no-store" })).json();
+  updatedText = data.updated;
+  _lastRows = data.rows;
+  lastRowsKey = JSON.stringify(data.rows);
+  startAnimation(data.rows);            // initial reveal: everything flaps in
+  const interval = (data.refresh || 120) * 1000;
+  setInterval(async () => {
+    const d = await (await fetch("/data.json", { cache: "no-store" })).json();
+    updatedText = d.updated; _lastRows = d.rows;
+    const key = JSON.stringify(d.rows);
+    if (key !== lastRowsKey) { lastRowsKey = key; startAnimation(d.rows); }
+    else if (!animating) { drawChrome(); frameStatic(); }
+  }, interval);
+}
+
+document.fonts.load(ROW_SIZE + "px " + FONT).then(() =>
+  document.fonts.ready).then(loop).catch(loop);
+</script>
+</body>
+</html>

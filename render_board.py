@@ -50,6 +50,27 @@ def _clock(dt) -> str:
     return dt.astimezone().strftime("%-I:%M%p").upper()[:-1]
 
 
+def row_view(stop: Stop) -> dict:
+    """Display strings for one board row — the single source of truth shared by
+    the PNG renderer and the web/canvas split-flap board."""
+    late = stop.is_late
+    if late:
+        m = stop.delay_min
+        status = f"+{m} MIN" if m < 60 else f"+{m // 60}H{m % 60:02d}"
+    elif stop.delay_min is not None:
+        status = "ON TIME"
+    else:
+        status = (stop.status or "SCHEDULED").upper()
+    return {
+        "sched": _clock(stop.sch),
+        "revised": _clock(stop.est) if (late and stop.est is not None) else None,
+        "route": stop.route.upper()[:18],
+        "dest": stop.dest.upper()[:13],
+        "status": status,
+        "late": late,
+    }
+
+
 # Column x-positions (px), tuned for ALL-CAPS Chakra Petch Bold at row size 24:
 # late time ends ~176, route ends ~433, "TO" ends ~612, before status (~622+).
 COL_TIME, COL_ROUTE, COL_TO = 16, 190, 448
@@ -88,32 +109,23 @@ def render(board: list[Stop], now: datetime | None = None) -> Image.Image:
 
     row_h = (h - y - 12) // MAX_ROWS
     for stop in board[:MAX_ROWS]:
-        late = stop.is_late
-        color = RED if late else YELLOW
+        v = row_view(stop)
+        color = RED if v["late"] else YELLOW
 
         # Departure time: scheduled in amber; when late, '-> revised' in red.
-        if late and stop.est is not None:
-            sched = _clock(stop.sch)
+        if v["revised"]:
             x = COL_TIME
-            d.text((x, y), sched, font=row_f, fill=YELLOW)
-            x += d.textlength(sched, font=row_f)
+            d.text((x, y), v["sched"], font=row_f, fill=YELLOW)
+            x += d.textlength(v["sched"], font=row_f)
             d.text((x, y), " → ", font=row_f, fill=YELLOW)
             x += d.textlength(" → ", font=row_f)
-            d.text((x, y), _clock(stop.est), font=row_f, fill=RED)
+            d.text((x, y), v["revised"], font=row_f, fill=RED)
         else:
-            d.text((COL_TIME, y), _clock(stop.sch), font=row_f, fill=color)
+            d.text((COL_TIME, y), v["sched"], font=row_f, fill=color)
 
-        d.text((COL_ROUTE, y), stop.route.upper()[:18], font=row_f, fill=color)
-        d.text((COL_TO, y), stop.dest.upper()[:13], font=row_f, fill=color)
-
-        if late:
-            m = stop.delay_min
-            status = f"+{m} MIN" if m < 60 else f"+{m // 60}H{m % 60:02d}"
-        elif stop.delay_min is not None:
-            status = "ON TIME"
-        else:
-            status = (stop.status or "SCHEDULED").upper()
-        d.text((w - 16, y), status, font=row_f, fill=color, anchor="ra")
+        d.text((COL_ROUTE, y), v["route"], font=row_f, fill=color)
+        d.text((COL_TO, y), v["dest"], font=row_f, fill=color)
+        d.text((w - 16, y), v["status"], font=row_f, fill=color, anchor="ra")
         y += row_h
 
     return img

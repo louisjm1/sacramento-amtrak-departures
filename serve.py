@@ -1,87 +1,84 @@
-"""Tiny web preview of the LCD board for desktop development.
+"""Web display of the board with a split-flap (Solari) animation.
 
-Serves an HTML page that shows the rendered panel at its true pixel size and
-refreshes the image IN PLACE (no page reload, so no white flash), plus the live
-PNG at /board.png (regenerated on each request). This is ONLY for previewing on
-a computer; the Pi uses board.py + pygame fullscreen.
+Serves a <canvas> app that renders the amber-on-black board and animates each
+character flipping forward to its target, staggered left-to-right, whenever the
+data changes. Use it two ways:
 
-    python3 serve.py            # http://localhost:8770
+  * Preview on a computer:  python3 serve.py  ->  http://localhost:8770
+  * On the Pi (animated):   run this, then `chromium-browser --kiosk http://localhost:8770`
+
+Endpoints:
+  /            the canvas app (web/board.html)
+  /data.json   current board rows (uses render_board.row_view — same strings
+               as the PNG renderer) plus the refresh interval
+  /font.ttf    the bundled Chakra Petch Bold, for @font-face
+  /board.png   static PNG render (debug / pygame parity)
 """
 
 from __future__ import annotations
 
 import io
+import json
+import os
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from amtrak_sac import get_board
-from render_board import render, PANEL_SIZE
+from render_board import render, row_view, PANEL_SIZE, MAX_ROWS
 
 PORT = 8770
-REFRESH_SECONDS = 120  # 2 minutes — browser-side auto-reload (matches device)
+REFRESH_SECONDS = 120  # how often the page polls /data.json (matches device)
 
-PAGE = """<!doctype html>
-<html><head><meta charset="utf-8">
-<title>Sacramento Departures — preview</title>
-<style>
-  html,body {{ margin:0; height:100%; background:#222;
-    display:flex; align-items:center; justify-content:center;
-    font-family:-apple-system,system-ui,sans-serif; }}
-  .frame {{ background:#000; padding:14px; border-radius:10px;
-    box-shadow:0 10px 40px rgba(0,0,0,.6); }}
-  img {{ width:{w}px; height:{h}px; display:block; image-rendering:pixelated; }}
-  .cap {{ color:#888; font-size:12px; text-align:center; margin-top:8px; }}
-</style></head>
-<body><div class="frame">
-  <img id="board" src="/board.png?t=0" width="{w}" height="{h}" alt="board">
-  <div class="cap">{w}×{h} preview · updates in place every {refresh}s (no flash)</div>
-</div>
-<script>
-  // Refresh WITHOUT reloading the page: preload the next frame, then swap it in
-  // once it has loaded — so there is never a blank flash. This mirrors the
-  // device, where pygame blits a full frame and flips the buffer in one step.
-  var REFRESH = {refresh} * 1000;
-  var board = document.getElementById('board');
-  function tick() {{
-    var url = '/board.png?t=' + Date.now();
-    var next = new Image();
-    next.onload = function() {{ board.src = url; }};
-    next.src = url;
-  }}
-  setInterval(tick, REFRESH);
-</script>
-</body></html>"""
+HERE = os.path.dirname(os.path.abspath(__file__))
+FONT_PATH = os.path.join(HERE, "fonts", "ChakraPetch-Bold.ttf")
+PAGE_PATH = os.path.join(HERE, "web", "board.html")
+
+
+def board_json() -> dict:
+    now = datetime.now().astimezone()
+    rows = [row_view(s) for s in get_board()[:MAX_ROWS]]
+    return {
+        "updated": now.strftime("updated %-I:%M %p"),
+        "refresh": REFRESH_SECONDS,
+        "panel": list(PANEL_SIZE),
+        "rows": rows,
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
-    def log_message(self, *_):  # quiet, but keep errors visible via exceptions
+    def log_message(self, *_):  # quiet
         pass
 
+    def _send(self, data: bytes, ctype: str, cache: str = "no-store") -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Cache-Control", cache)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
-        if self.path.startswith("/board.png"):
-            try:
+        path = self.path.split("?", 1)[0]
+        try:
+            if path in ("/", "/index.html"):
+                with open(PAGE_PATH, "rb") as f:
+                    self._send(f.read(), "text/html; charset=utf-8")
+            elif path == "/data.json":
+                self._send(json.dumps(board_json()).encode("utf-8"),
+                           "application/json")
+            elif path == "/font.ttf":
+                with open(FONT_PATH, "rb") as f:
+                    self._send(f.read(), "font/ttf", cache="max-age=86400")
+            elif path == "/board.png":
                 buf = io.BytesIO()
                 render(get_board()).save(buf, format="PNG")
-                data = buf.getvalue()
-            except Exception as e:  # noqa: BLE001
-                self.send_error(502, f"render failed: {e}")
-                return
-            self.send_response(200)
-            self.send_header("Content-Type", "image/png")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-            return
-
-        w, h = PANEL_SIZE
-        body = PAGE.format(w=w, h=h, refresh=REFRESH_SECONDS).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+                self._send(buf.getvalue(), "image/png")
+            else:
+                self.send_error(404)
+        except Exception as e:  # noqa: BLE001
+            self.send_error(502, f"error: {e}")
 
 
 if __name__ == "__main__":
-    print(f"serving Sacramento board preview at http://localhost:{PORT}")
+    print(f"serving Sacramento board at http://localhost:{PORT}")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
