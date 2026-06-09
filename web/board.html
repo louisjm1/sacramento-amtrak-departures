@@ -34,7 +34,8 @@ const FLAP = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:+-./→";
 const FLAP_IDX = Object.fromEntries([...FLAP].map((c, i) => [c, i]));
 const MS_PER_FLAP = 57;         // time to advance one glyph (~2/3 speed)
 const STAGGER_MS_PER_PX = 1.05; // left-to-right wave: later columns start later
-const SEAM_FRAC = 0.46;         // where each card splits, ~middle of the caps
+let SEAM_OFF = 10;              // px from row top to the flap hinge; set from
+                               // real glyph metrics in computeSeam() on load
 
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
@@ -159,6 +160,20 @@ function drawChrome() {
 }
 
 // --- Split-flap card rendering --------------------------------------------
+// Hinge = the true vertical center of the caps, measured from real glyph ink
+// (textBaseline "top" leaves blank space above the caps, so the box middle
+// would sit too low).
+function computeSeam() {
+  setFont(ROW_SIZE);
+  const prev = ctx.textBaseline;
+  ctx.textBaseline = "top";
+  const m = ctx.measureText("ACEHMW0289");
+  ctx.textBaseline = prev;
+  if (m.actualBoundingBoxAscent != null && m.actualBoundingBoxDescent != null) {
+    SEAM_OFF = (-m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / 2;
+  }
+}
+
 function drawSeam(x, w, sy) {
   ctx.fillStyle = "#000";
   ctx.fillRect(x - 1, sy, w + 2, 1);   // thin dark gap between the two flaps
@@ -183,7 +198,7 @@ function drawHalf(g, x, y, isTop, scaleY, seam, color) {
 // One flap turning from `fromG` to `toG`, progress p in [0,1]: the old top
 // folds down to the hinge (first half), then the new bottom folds in (second).
 function drawFlip(x, y, fromG, toG, p, color) {
-  const seam = y + ROW_SIZE * SEAM_FRAC;
+  const seam = y + SEAM_OFF;
   drawHalf(toG, x, y, true, 1, seam, color);     // new top, already settled behind
   drawHalf(fromG, x, y, false, 1, seam, color);  // old bottom, still showing
   if (p < 0.5) drawHalf(fromG, x, y, true, 1 - 2 * p, seam, color);  // old top folds down
@@ -196,7 +211,7 @@ function drawGlyph(g, x, y, color) {
   if (g === " ") return;
   ctx.fillStyle = color;
   ctx.fillText(g, x, y);
-  drawSeam(x, ctx.measureText(g).width, y + ROW_SIZE * SEAM_FRAC);
+  drawSeam(x, ctx.measureText(g).width, y + SEAM_OFF);
 }
 
 function frame(now) {
@@ -250,6 +265,7 @@ let _lastRows = [];
 function lastRows() { return _lastRows; }
 
 async function loop() {
+  computeSeam();   // hinge position from the now-loaded board font
   const data = await (await fetch("/data.json", { cache: "no-store" })).json();
   updatedText = data.updated;
   _lastRows = data.rows;
