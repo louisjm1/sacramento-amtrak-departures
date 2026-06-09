@@ -1,5 +1,7 @@
 Pillow>=10
-# On the Raspberry Pi also install the panel driver, e.g.:
-#   git clone https://github.com/waveshareteam/e-Paper
-# and add e-Paper/RaspberryPi_JetsonNano/python/lib to PYTHONPATH,
-# or for Pimoroni: pip install inky[rpi]
+
+# Raspberry Pi display only: the board is drawn fullscreen on the Hosyond 7"
+# DSI LCD via pygame. Install on the Pi (`pip install pygame`). On a Mac it's
+# optional — without it, board.py --once just writes board.png and you preview
+# with serve.py.
+pygame>=2.1

@@ -1,12 +1,10 @@
-"""Entry point: refresh the Sacramento Amtrak e-ink board on an interval.
+"""Entry point: draw the Sacramento departures board on the Pi's LCD, on a loop.
 
-    python3 board.py            # loop forever, refresh every 15 min
-    python3 board.py --once     # render a single frame and exit
+    python3 board.py            # fullscreen on the DSI LCD, refresh every 2 min
+    python3 board.py --once     # render a single frame and exit (saves PNG off-Pi)
 
-e-ink note: each refresh fully repaints the panel (slow on color panels — many
-take 20-30s and flash through the palette). 15 minutes suits a slow color panel
-and is gentle on the data feeds. The panel holds the last image with no power
-between refreshes.
+The Hosyond 7" DSI panel is a normal fast LCD, so refreshes are instant; 2 min
+keeps delays near-live while being gentle on the data feeds. ESC / Q quit.
 """
 
 from __future__ import annotations
@@ -17,14 +15,14 @@ import time
 
 from amtrak_sac import get_board
 from render_board import render
-from display_eink import show
+import display_screen
 
-REFRESH_SECONDS = 900  # 15 minutes (slow color e-ink panel)
+REFRESH_SECONDS = 120  # 2 minutes
 
 
 def refresh_once() -> None:
     try:
-        show(render(get_board()))
+        display_screen.show(render(get_board()))
     except Exception as e:  # noqa: BLE001 - never let a transient fetch error kill the loop
         print(f"refresh failed: {e}", file=sys.stderr)
 
@@ -35,13 +33,21 @@ def main() -> None:
     ap.add_argument("--interval", type=int, default=REFRESH_SECONDS)
     args = ap.parse_args()
 
-    if args.once:
+    try:
         refresh_once()
-        return
-
-    while True:
-        refresh_once()
-        time.sleep(args.interval)
+        if args.once:
+            return
+        while True:
+            # Wait out the interval while staying responsive to quit/touch events.
+            waited = 0.0
+            while waited < args.interval:
+                if display_screen.should_quit():
+                    return
+                time.sleep(0.2)
+                waited += 0.2
+            refresh_once()
+    finally:
+        display_screen.teardown()
 
 
 if __name__ == "__main__":

@@ -1,8 +1,9 @@
 # Sacramento Amtrak Departures Board
 
 A small real-time **departures** board for **Sacramento Valley Station (SAC)**,
-built for a Raspberry Pi + e-ink panel. Shows the next departures with delays
-marked in red. Departures only — trains terminating at Sacramento are excluded.
+built for a Raspberry Pi + a 7" DSI touchscreen LCD (Hosyond 800x480). Shows the
+next departures with delays marked. Departures only — trains terminating at
+Sacramento are excluded.
 
 Covers every route serving SAC: **Capitol Corridor, San Joaquins, California
 Zephyr, Coast Starlight.**
@@ -44,15 +45,15 @@ export TRANSIT_511_TOKEN=your-token-here
 | `amtrak_sac.py`  | Fetch Amtraker, merge GTFS schedule, compute delays, build the board |
 | `gtfs_sched.py`  | Read the 511/Gold Runner GTFS feeds → scheduled SAC departures |
 | `render_board.py`| Draw the board to a PIL image (amber-on-black, panel-sized) |
-| `display_eink.py`| The one hardware-specific file — push the image to the panel |
-| `board.py`       | Entry point: refresh on an interval (default 15 min) |
+| `display_screen.py`| The one hardware-specific file — show the image fullscreen (pygame) |
+| `board.py`       | Entry point: refresh on an interval (default 2 min) |
 | `serve.py`       | Optional local web preview of the panel image |
 | `render_sample.py`| Dev tool: render the layout with any font (used for font selection) |
 | `fonts/`         | Bundled **Chakra Petch Bold** (OFL) — the split-flap-style board font |
 
 Styled as a classic split-flap departures board: ALL-CAPS Chakra Petch Bold,
-**amber/yellow text on black** with delayed trains in orange-red (for a colour
-e-ink panel). Times are 12-hour; delays compact (`+20 MIN`, `+1H35`).
+**amber/yellow text on black** with delayed trains in orange-red. Times are
+12-hour; delays compact (`+20 MIN`, `+1H35`).
 
 ## Run / preview on any machine
 
@@ -65,22 +66,32 @@ export TRANSIT_511_TOKEN=your-token
 ./.venv/bin/python amtrak_sac.py     # print the board as text
 ```
 
-## Deploy on the Raspberry Pi
+## Deploy on the Raspberry Pi (Hosyond 7" DSI LCD)
 
-1. Copy this repo to the Pi, create the venv, `pip install -r requirements.txt`,
-   and set `TRANSIT_511_TOKEN`.
-2. Install your colour panel's driver and confirm the import in `display_eink.py`
-   matches it (Pimoroni Inky Impression and Waveshare 7.3" 7-colour `epd7in3f`
-   are both handled). Set `PANEL_SIZE` in `render_board.py` to your panel's pixels.
-3. Run `python3 board.py` (under systemd or a cron `@reboot` to start on boot).
+The Hosyond is a driver-free DSI panel: connect the ribbon cable to the Pi's
+**DISPLAY/DSI** port (+ the USB-touch lead if used) and it just works as the
+Pi's 800x480 screen — no driver install.
+
+1. Copy this repo to the Pi, create a venv, `pip install -r requirements.txt`
+   (this installs `pygame`), and `export TRANSIT_511_TOKEN=...`.
+2. Run it fullscreen: `python3 board.py`. The board fills the LCD and refreshes
+   every 2 minutes; press ESC/Q to quit.
+3. Start on boot with a desktop-session autostart entry, e.g. add to
+   `~/.config/autostart/sacboard.desktop` a command that runs `board.py`, or use
+   a systemd user service. (If you hit a Wayland/SDL issue on Pi 5, try
+   `SDL_VIDEODRIVER=wayland` or run under X.)
+
+**Alternative — browser kiosk:** since `serve.py` already serves the board as a
+web page, you can instead run `python3 serve.py` and launch
+`chromium-browser --kiosk http://localhost:8770`. Handy if you want to lean on
+the touchscreen later.
 
 ## Tuning
 
-- **Panel size / colors** — `PANEL_SIZE` and the `BLACK`/`YELLOW`/`RED` palette
-  in `render_board.py`. Colours are chosen to map onto common colour e-ink
-  palettes (4-colour B/W/R/Y and 7-colour ACeP/Inky Impression).
+- **Resolution / colors** — `PANEL_SIZE` (800x480) and the `BLACK`/`YELLOW`/`RED`
+  palette in `render_board.py`.
 - **Time window** — `MAX_HOURS` in `amtrak_sac.py` (default 24).
-- **Refresh rate** — `--interval` seconds, or `REFRESH_SECONDS` (default 900 = 15 min).
+- **Refresh rate** — `--interval` seconds, or `REFRESH_SECONDS` (default 120 = 2 min).
 - **Rows shown** — `MAX_ROWS` in `render_board.py` (default 8).
 - **Add a route** — one entry in `OPERATORS` in `gtfs_sched.py`.
 
