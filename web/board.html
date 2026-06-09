@@ -32,8 +32,9 @@ const HEAD_Y = 70, LINE_Y = 100, ROWS_TOP = 112, ROW_H = 44, MAX_ROWS = 8;
 // so the distance from the old glyph to the new one sets how long a cell spins.
 const FLAP = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:+-./→";
 const FLAP_IDX = Object.fromEntries([...FLAP].map((c, i) => [c, i]));
-const MS_PER_FLAP = 38;        // time to advance one glyph
-const STAGGER_MS_PER_PX = 0.7; // left-to-right wave: later columns start later
+const MS_PER_FLAP = 57;         // time to advance one glyph (~2/3 speed)
+const STAGGER_MS_PER_PX = 1.05; // left-to-right wave: later columns start later
+const SEAM_FRAC = 0.46;         // where each card splits, ~middle of the caps
 
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
@@ -157,6 +158,47 @@ function drawChrome() {
   ctx.beginPath(); ctx.moveTo(12, LINE_Y); ctx.lineTo(W - 12, LINE_Y); ctx.stroke();
 }
 
+// --- Split-flap card rendering --------------------------------------------
+function drawSeam(x, w, sy) {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(x - 1, sy, w + 2, 1);   // thin dark gap between the two flaps
+}
+
+// Draw one clipped half of a glyph, scaled vertically about the seam (so it
+// folds toward/away from the hinge). isTop selects the upper or lower half.
+function drawHalf(g, x, y, isTop, scaleY, seam, color) {
+  if (g === " " || scaleY <= 0) return;
+  const clipY = isTop ? y : seam;
+  const clipH = isTop ? (seam - y) : (y + ROW_SIZE - seam);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x - 1, clipY, ctx.measureText(g).width + 2, clipH);
+  ctx.clip();
+  ctx.translate(0, seam); ctx.scale(1, scaleY); ctx.translate(0, -seam);
+  ctx.fillStyle = color;
+  ctx.fillText(g, x, y);
+  ctx.restore();
+}
+
+// One flap turning from `fromG` to `toG`, progress p in [0,1]: the old top
+// folds down to the hinge (first half), then the new bottom folds in (second).
+function drawFlip(x, y, fromG, toG, p, color) {
+  const seam = y + ROW_SIZE * SEAM_FRAC;
+  drawHalf(toG, x, y, true, 1, seam, color);     // new top, already settled behind
+  drawHalf(fromG, x, y, false, 1, seam, color);  // old bottom, still showing
+  if (p < 0.5) drawHalf(fromG, x, y, true, 1 - 2 * p, seam, color);  // old top folds down
+  else drawHalf(toG, x, y, false, 2 * p - 1, seam, color);          // new bottom folds in
+  drawSeam(x, Math.max(ctx.measureText(fromG).width, ctx.measureText(toG).width), seam);
+}
+
+// A settled glyph, drawn as a flap card (with the hinge seam).
+function drawGlyph(g, x, y, color) {
+  if (g === " ") return;
+  ctx.fillStyle = color;
+  ctx.fillText(g, x, y);
+  drawSeam(x, ctx.measureText(g).width, y + ROW_SIZE * SEAM_FRAC);
+}
+
 function frame(now) {
   drawChrome();
   setFont(ROW_SIZE);
@@ -165,17 +207,22 @@ function frame(now) {
 
   let allSettled = true;
   for (const cell of cells) {
-    let glyph;
-    if (cell.fixed !== undefined) {
-      glyph = cell.fixed;
-    } else {
-      const t = now - animStart - cell.startAt;
-      let k = t <= 0 ? 0 : Math.floor(t / MS_PER_FLAP);
-      if (k < cell.steps) allSettled = false;
-      k = Math.min(k, cell.steps);
-      glyph = FLAP[(cell.sIdx + k) % FLAP.length];
+    if (cell.fixed !== undefined) { drawGlyph(cell.fixed, cell.x, cell.y, cell.color); continue; }
+    const t = now - animStart - cell.startAt;
+    if (t <= 0) {
+      if (cell.steps > 0) allSettled = false;
+      drawGlyph(FLAP[cell.sIdx], cell.x, cell.y, cell.color);  // old glyph, awaiting its turn
+      continue;
     }
-    if (glyph !== " ") { ctx.fillStyle = cell.color; ctx.fillText(glyph, cell.x, cell.y); }
+    const fpos = t / MS_PER_FLAP, floor = Math.floor(fpos);
+    if (floor >= cell.steps) {
+      drawGlyph(cell.ch, cell.x, cell.y, cell.color);          // settled
+    } else {
+      allSettled = false;
+      const fromG = FLAP[(cell.sIdx + floor) % FLAP.length];
+      const toG = FLAP[(cell.sIdx + floor + 1) % FLAP.length];
+      drawFlip(cell.x, cell.y, fromG, toG, fpos - floor, cell.color);
+    }
   }
 
   if (allSettled) {
@@ -191,8 +238,7 @@ function frame(now) {
 function frameStatic() {
   setFont(ROW_SIZE); ctx.textAlign = "left"; ctx.textBaseline = "top";
   for (const cell of cells) {
-    const g = cell.fixed !== undefined ? cell.fixed : cell.ch;
-    if (g !== " ") { ctx.fillStyle = cell.color; ctx.fillText(g, cell.x, cell.y); }
+    drawGlyph(cell.fixed !== undefined ? cell.fixed : cell.ch, cell.x, cell.y, cell.color);
   }
 }
 
