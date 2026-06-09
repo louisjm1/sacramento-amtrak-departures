@@ -47,6 +47,11 @@ export TRANSIT_511_TOKEN=your-token-here
 | `display_eink.py`| The one hardware-specific file — push the image to the panel |
 | `board.py`       | Entry point: refresh on an interval (default 2 min) |
 | `serve.py`       | Optional local web preview of the panel image |
+| `render_sample.py`| Dev tool: render the layout with any font (used for font selection) |
+| `fonts/`         | Bundled **Chakra Petch Bold** (OFL) — the split-flap-style board font |
+
+Typography is ALL-CAPS in Chakra Petch Bold to evoke a classic split-flap
+departures board; times are 12-hour, delays compact (`+20 MIN`, `+1H35`).
 
 ## Run / preview on any machine
 

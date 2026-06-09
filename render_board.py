@@ -8,6 +8,7 @@ PANEL_SIZE to match your panel is the only edit needed.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
@@ -22,12 +23,14 @@ RED = (220, 0, 0)
 
 MAX_ROWS = 8  # rows that fit comfortably at this size
 
-# Font candidates: macOS (for local testing) then Raspberry Pi OS.
+# Departure-board font (Chakra Petch Bold), bundled in fonts/ so it works
+# identically on the Mac and the Pi. System fonts are emergency fallbacks.
+_BUNDLED_FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "fonts", "ChakraPetch-Bold.ttf")
 _FONT_PATHS = [
+    _BUNDLED_FONT,
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ]
 
 
@@ -41,13 +44,13 @@ def _font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def _clock(dt) -> str:
-    """Local time like '3:05p' (no leading zero, compact am/pm)."""
-    return dt.astimezone().strftime("%-I:%M%p").lower()[:-1]
+    """12-hour local time like '3:05P' (no leading zero, compact upper am/pm)."""
+    return dt.astimezone().strftime("%-I:%M%p").upper()[:-1]
 
 
-# Column x-positions (px). Time column is wide enough for 'sched -> revised'
-# (~174px); route ends by ~417, "To" by ~588, before the right-aligned status.
-COL_TIME, COL_ROUTE, COL_TO = 16, 205, 435
+# Column x-positions (px), tuned for ALL-CAPS Chakra Petch Bold at row size 24:
+# late time ends ~176, route ends ~433, "TO" ends ~612, before status (~622+).
+COL_TIME, COL_ROUTE, COL_TO = 16, 190, 448
 
 
 def render(board: list[Stop], now: datetime | None = None) -> Image.Image:
@@ -57,8 +60,8 @@ def render(board: list[Stop], now: datetime | None = None) -> Image.Image:
     d = ImageDraw.Draw(img)
 
     title_f = _font(36)
-    sub_f = _font(18)
-    row_f = _font(26)
+    sub_f = _font(13)   # smaller "updated …" line
+    row_f = _font(24)
     small_f = _font(20)
 
     # Header bar.
@@ -99,15 +102,16 @@ def render(board: list[Stop], now: datetime | None = None) -> Image.Image:
         else:
             d.text((COL_TIME, y), _clock(stop.sch), font=row_f, fill=color)
 
-        d.text((COL_ROUTE, y), stop.route[:18], font=row_f, fill=color)
-        d.text((COL_TO, y), stop.dest[:13], font=row_f, fill=color)
+        d.text((COL_ROUTE, y), stop.route.upper()[:18], font=row_f, fill=color)
+        d.text((COL_TO, y), stop.dest.upper()[:13], font=row_f, fill=color)
 
         if late:
-            status = f"+{stop.delay_min} MIN LATE"
+            m = stop.delay_min
+            status = f"+{m} MIN" if m < 60 else f"+{m // 60}H{m % 60:02d}"
         elif stop.delay_min is not None:
-            status = "On time"
+            status = "ON TIME"
         else:
-            status = stop.status or "Scheduled"
+            status = (stop.status or "SCHEDULED").upper()
         d.text((w - 16, y), status, font=row_f, fill=color, anchor="ra")
         y += row_h
 
