@@ -1,11 +1,12 @@
 """Entry point: refresh the Sacramento Amtrak e-ink board on an interval.
 
-    python3 board.py            # loop forever, refresh every 90s
+    python3 board.py            # loop forever, refresh every 15 min
     python3 board.py --once     # render a single frame and exit
 
-e-ink note: each refresh fully repaints the panel (a brief flash). 2 minutes is
-a sane interval that's also polite to the free Amtraker service. The panel holds
-the last image with zero power between refreshes.
+e-ink note: each refresh fully repaints the panel (slow on color panels — many
+take 20-30s and flash through the palette). 15 minutes suits a slow color panel
+and is gentle on the data feeds. The panel holds the last image with no power
+between refreshes.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from amtrak_sac import get_board
 from render_board import render
 from display_eink import show
 
-REFRESH_SECONDS = 120  # 2 minutes
+REFRESH_SECONDS = 900  # 15 minutes (slow color e-ink panel)
 
 
 def refresh_once() -> None:

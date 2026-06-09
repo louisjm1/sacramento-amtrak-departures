@@ -1,9 +1,11 @@
 """Render the SAC board to a PIL image sized for an e-ink panel.
 
-Palette is black / white / red — the three colors a tri-color Waveshare/Inky
-panel supports. On the Pi this image goes straight to the panel; on a Mac it
-saves as a PNG you can eyeball. Layout is resolution-driven, so changing
-PANEL_SIZE to match your panel is the only edit needed.
+Styled as a classic split-flap departures board: amber/yellow text on black,
+with delayed trains in orange-red. These colors are in the palette of common
+color e-ink panels (4-colour B/W/R/Y and 7-colour ACeP/Inky Impression). On
+the Pi this image goes straight to the panel; on a Mac it saves a PNG. Layout
+is resolution-driven, so changing PANEL_SIZE to match your panel is the only
+required edit.
 """
 
 from __future__ import annotations
@@ -17,9 +19,9 @@ from amtrak_sac import Stop
 # Waveshare 7.5" v2 is 800x480. Change this to match your panel.
 PANEL_SIZE = (800, 480)
 
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-RED = (220, 0, 0)
+BLACK = (0, 0, 0)        # background
+YELLOW = (255, 200, 0)   # amber board text
+RED = (255, 75, 35)      # delayed trains (orange-red, pops on black)
 
 MAX_ROWS = 8  # rows that fit comfortably at this size
 
@@ -56,7 +58,7 @@ COL_TIME, COL_ROUTE, COL_TO = 16, 190, 448
 def render(board: list[Stop], now: datetime | None = None) -> Image.Image:
     now = now or datetime.now().astimezone()
     w, h = PANEL_SIZE
-    img = Image.new("RGB", PANEL_SIZE, WHITE)
+    img = Image.new("RGB", PANEL_SIZE, BLACK)
     d = ImageDraw.Draw(img)
 
     title_f = _font(36)
@@ -64,39 +66,38 @@ def render(board: list[Stop], now: datetime | None = None) -> Image.Image:
     row_f = _font(24)
     small_f = _font(20)
 
-    # Header bar.
-    d.rectangle([0, 0, w, 58], fill=BLACK)
-    d.text((16, 10), "SACRAMENTO DEPARTURES", font=title_f, fill=WHITE)
+    # Title + updated time (amber on black, split-flap style — no header bar).
+    d.text((16, 10), "SACRAMENTO DEPARTURES", font=title_f, fill=YELLOW)
     d.text((w - 16, 20), now.strftime("updated %-I:%M %p"),
-           font=sub_f, fill=WHITE, anchor="ra")
+           font=sub_f, fill=YELLOW, anchor="ra")
 
     # Column header.
     y = 70
-    d.text((COL_TIME, y), "DEPART", font=small_f, fill=BLACK)
-    d.text((COL_ROUTE, y), "ROUTE", font=small_f, fill=BLACK)
-    d.text((COL_TO, y), "TO", font=small_f, fill=BLACK)
-    d.text((w - 16, y), "STATUS", font=small_f, fill=BLACK, anchor="ra")
+    d.text((COL_TIME, y), "DEPART", font=small_f, fill=YELLOW)
+    d.text((COL_ROUTE, y), "ROUTE", font=small_f, fill=YELLOW)
+    d.text((COL_TO, y), "TO", font=small_f, fill=YELLOW)
+    d.text((w - 16, y), "STATUS", font=small_f, fill=YELLOW, anchor="ra")
     y += 30
-    d.line([12, y, w - 12, y], fill=BLACK, width=2)
+    d.line([12, y, w - 12, y], fill=YELLOW, width=2)
     y += 12
 
     if not board:
-        d.text((w // 2, h // 2), "No upcoming trains", font=row_f,
-               fill=BLACK, anchor="mm")
+        d.text((w // 2, h // 2), "NO UPCOMING TRAINS", font=row_f,
+               fill=YELLOW, anchor="mm")
         return img
 
     row_h = (h - y - 12) // MAX_ROWS
     for stop in board[:MAX_ROWS]:
         late = stop.is_late
-        color = RED if late else BLACK
+        color = RED if late else YELLOW
 
-        # Departure time: scheduled in black; when late, '-> revised' in red.
+        # Departure time: scheduled in amber; when late, '-> revised' in red.
         if late and stop.est is not None:
             sched = _clock(stop.sch)
             x = COL_TIME
-            d.text((x, y), sched, font=row_f, fill=BLACK)
+            d.text((x, y), sched, font=row_f, fill=YELLOW)
             x += d.textlength(sched, font=row_f)
-            d.text((x, y), " → ", font=row_f, fill=BLACK)
+            d.text((x, y), " → ", font=row_f, fill=YELLOW)
             x += d.textlength(" → ", font=row_f)
             d.text((x, y), _clock(stop.est), font=row_f, fill=RED)
         else:

@@ -43,15 +43,16 @@ export TRANSIT_511_TOKEN=your-token-here
 |------|------|
 | `amtrak_sac.py`  | Fetch Amtraker, merge GTFS schedule, compute delays, build the board |
 | `gtfs_sched.py`  | Read the 511/Gold Runner GTFS feeds → scheduled SAC departures |
-| `render_board.py`| Draw the board to a PIL image (black/white/red, panel-sized) |
+| `render_board.py`| Draw the board to a PIL image (amber-on-black, panel-sized) |
 | `display_eink.py`| The one hardware-specific file — push the image to the panel |
-| `board.py`       | Entry point: refresh on an interval (default 2 min) |
+| `board.py`       | Entry point: refresh on an interval (default 15 min) |
 | `serve.py`       | Optional local web preview of the panel image |
 | `render_sample.py`| Dev tool: render the layout with any font (used for font selection) |
 | `fonts/`         | Bundled **Chakra Petch Bold** (OFL) — the split-flap-style board font |
 
-Typography is ALL-CAPS in Chakra Petch Bold to evoke a classic split-flap
-departures board; times are 12-hour, delays compact (`+20 MIN`, `+1H35`).
+Styled as a classic split-flap departures board: ALL-CAPS Chakra Petch Bold,
+**amber/yellow text on black** with delayed trains in orange-red (for a colour
+e-ink panel). Times are 12-hour; delays compact (`+20 MIN`, `+1H35`).
 
 ## Run / preview on any machine
 
@@ -68,18 +69,18 @@ export TRANSIT_511_TOKEN=your-token
 
 1. Copy this repo to the Pi, create the venv, `pip install -r requirements.txt`,
    and set `TRANSIT_511_TOKEN`.
-2. Install your panel's driver and confirm the import in `display_eink.py` matches
-   it (Waveshare `epd7in5_V2` by default; Pimoroni Inky noted inline). Set
-   `PANEL_SIZE` in `render_board.py` to your panel's pixels.
+2. Install your colour panel's driver and confirm the import in `display_eink.py`
+   matches it (Pimoroni Inky Impression and Waveshare 7.3" 7-colour `epd7in3f`
+   are both handled). Set `PANEL_SIZE` in `render_board.py` to your panel's pixels.
 3. Run `python3 board.py` (under systemd or a cron `@reboot` to start on boot).
 
 ## Tuning
 
-- **Panel size / colors** — `PANEL_SIZE` and the palette in `render_board.py`.
-  Tri-color panels need the red pixels split into a second buffer (see the note
-  in `display_eink.py`).
+- **Panel size / colors** — `PANEL_SIZE` and the `BLACK`/`YELLOW`/`RED` palette
+  in `render_board.py`. Colours are chosen to map onto common colour e-ink
+  palettes (4-colour B/W/R/Y and 7-colour ACeP/Inky Impression).
 - **Time window** — `MAX_HOURS` in `amtrak_sac.py` (default 24).
-- **Refresh rate** — `--interval` seconds, or `REFRESH_SECONDS` (default 120).
+- **Refresh rate** — `--interval` seconds, or `REFRESH_SECONDS` (default 900 = 15 min).
 - **Rows shown** — `MAX_ROWS` in `render_board.py` (default 8).
 - **Add a route** — one entry in `OPERATORS` in `gtfs_sched.py`.
 

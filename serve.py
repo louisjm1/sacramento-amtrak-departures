@@ -16,7 +16,7 @@ from amtrak_sac import get_board
 from render_board import render, PANEL_SIZE
 
 PORT = 8770
-REFRESH_SECONDS = 120  # 2 minutes — browser-side auto-reload of the preview
+REFRESH_SECONDS = 900  # 15 minutes — browser-side auto-reload (matches device)
 
 PAGE = """<!doctype html>
 <html><head><meta charset="utf-8">
