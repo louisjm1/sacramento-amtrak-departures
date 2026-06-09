@@ -1,10 +1,11 @@
-"""Tiny web preview of the e-ink board for desktop development.
+"""Tiny web preview of the LCD board for desktop development.
 
 Serves an HTML page that shows the rendered panel at its true pixel size and
-auto-refreshes, plus the live PNG at /board.png (regenerated on each request).
-This is ONLY for previewing on a computer; the Pi uses board.py + the panel.
+refreshes the image IN PLACE (no page reload, so no white flash), plus the live
+PNG at /board.png (regenerated on each request). This is ONLY for previewing on
+a computer; the Pi uses board.py + pygame fullscreen.
 
-    python3 serve.py            # http://localhost:8765
+    python3 serve.py            # http://localhost:8770
 """
 
 from __future__ import annotations
@@ -20,8 +21,7 @@ REFRESH_SECONDS = 120  # 2 minutes — browser-side auto-reload (matches device)
 
 PAGE = """<!doctype html>
 <html><head><meta charset="utf-8">
-<title>Sacramento Amtrak Board — preview</title>
-<meta http-equiv="refresh" content="{refresh}">
+<title>Sacramento Departures — preview</title>
 <style>
   html,body {{ margin:0; height:100%; background:#222;
     display:flex; align-items:center; justify-content:center;
@@ -32,9 +32,24 @@ PAGE = """<!doctype html>
   .cap {{ color:#888; font-size:12px; text-align:center; margin-top:8px; }}
 </style></head>
 <body><div class="frame">
-  <img src="/board.png?t={refresh}" width="{w}" height="{h}" alt="board">
-  <div class="cap">{w}×{h} e-ink preview · auto-refreshes every {refresh}s</div>
-</div></body></html>"""
+  <img id="board" src="/board.png?t=0" width="{w}" height="{h}" alt="board">
+  <div class="cap">{w}×{h} preview · updates in place every {refresh}s (no flash)</div>
+</div>
+<script>
+  // Refresh WITHOUT reloading the page: preload the next frame, then swap it in
+  // once it has loaded — so there is never a blank flash. This mirrors the
+  // device, where pygame blits a full frame and flips the buffer in one step.
+  var REFRESH = {refresh} * 1000;
+  var board = document.getElementById('board');
+  function tick() {{
+    var url = '/board.png?t=' + Date.now();
+    var next = new Image();
+    next.onload = function() {{ board.src = url; }};
+    next.src = url;
+  }}
+  setInterval(tick, REFRESH);
+</script>
+</body></html>"""
 
 
 class Handler(BaseHTTPRequestHandler):

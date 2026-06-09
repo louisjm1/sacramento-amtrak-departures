@@ -24,7 +24,9 @@ def _ensure(size):
     if _screen is None:
         pygame.init()
         pygame.mouse.set_visible(False)
-        _screen = pygame.display.set_mode(size, pygame.FULLSCREEN)
+        # DOUBLEBUF + a full-screen blit each refresh = the new frame replaces the
+        # old one in a single buffer swap, so the panel never flashes/blanks.
+        _screen = pygame.display.set_mode(size, pygame.FULLSCREEN | pygame.DOUBLEBUF)
         pygame.display.set_caption("Sacramento Departures")
     return _screen
 
