@@ -54,7 +54,10 @@ let cells = [];        // current animation target cells
 let animStart = 0;     // performance.now() when the current animation began
 let animating = false;
 let updatedText = "";
+let updatedAge = 0;            // seconds since the shown data was fetched
+let connected = false;        // true once we've received any board
 let lastRowsKey = null;
+const STALE_AFTER = 150;       // show an "old" badge past this age (one missed refresh)
 
 function setFont(size) { ctx.font = size + "px " + FONT; }
 
@@ -143,10 +146,22 @@ function drawChrome() {
   setFont(TITLE_SIZE);
   ctx.fillText("SACRAMENTO DEPARTURES", 16, 10);
 
+  // "updated H:MM AM", plus a red "· Nm OLD" badge when the data is stale
+  // (a fetch has been failing — wifi/feed down).
   ctx.textAlign = "right";
   setFont(UPD_SIZE);
-  ctx.fillText(updatedText, RIGHT, 22);
+  if (updatedAge >= STALE_AFTER) {
+    const badge = " · " + Math.round(updatedAge / 60) + "m OLD";
+    ctx.fillStyle = RED;
+    ctx.fillText(badge, RIGHT, 22);
+    ctx.fillStyle = AMBER;
+    ctx.fillText(updatedText, RIGHT - ctx.measureText(badge).width, 22);
+  } else {
+    ctx.fillStyle = AMBER;
+    ctx.fillText(updatedText, RIGHT, 22);
+  }
 
+  ctx.fillStyle = AMBER;
   ctx.textAlign = "left";
   setFont(HEAD_SIZE);
   ctx.fillText("DEPART", COL_TIME, HEAD_Y);
@@ -273,11 +288,22 @@ async function fetchData() {
 }
 
 function applyData(d) {
+  connected = true;
   updatedText = d.updated;
+  updatedAge = d.age_sec || 0;
   _lastRows = d.rows;
   const key = JSON.stringify(d.rows);
   if (key !== lastRowsKey) { lastRowsKey = key; startAnimation(d.rows); }
   else if (!animating) { drawChrome(); frameStatic(); }
+}
+
+// First-boot placeholder so the panel isn't blank while we wait for the server.
+function drawConnecting() {
+  drawChrome();
+  setFont(ROW_SIZE);
+  ctx.textAlign = "center"; ctx.fillStyle = AMBER;
+  ctx.fillText("CONNECTING…", W / 2, ROWS_TOP + 3 * ROW_H);
+  ctx.textAlign = "left";
 }
 
 async function loop() {
@@ -285,6 +311,7 @@ async function loop() {
   // Wait for the server — on boot Chromium can start before serve.py is up.
   let data = null;
   while (!data) {
+    if (!connected) drawConnecting();
     try { data = await fetchData(); }
     catch (e) { await sleep(2000); }
   }

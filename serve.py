@@ -20,6 +20,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -34,15 +35,30 @@ FONT_PATH = os.path.join(HERE, "fonts", "ChakraPetch-Bold.ttf")
 PAGE_PATH = os.path.join(HERE, "web", "board.html")
 
 
+# Last successfully-fetched board, so a wifi/feed outage degrades gracefully:
+# /data.json keeps serving the last good rows (with their age) instead of failing.
+_LAST = {"rows": None, "at": None}
+_LOCK = threading.Lock()
+
+
 def board_json() -> dict:
-    now = datetime.now(PACIFIC)
-    rows = [row_view(s) for s in get_board()[:MAX_ROWS]]
-    return {
-        "updated": now.strftime("updated %-I:%M %p"),
-        "refresh": REFRESH_SECONDS,
-        "panel": list(PANEL_SIZE),
-        "rows": rows,
-    }
+    with _LOCK:
+        try:
+            fresh = [row_view(s) for s in get_board()[:MAX_ROWS]]
+        except Exception:  # noqa: BLE001 - upstream/wifi down: fall back to cache
+            fresh = None
+        now = datetime.now(PACIFIC)
+        if fresh is not None:
+            _LAST["rows"], _LAST["at"] = fresh, now
+        if _LAST["rows"] is None:
+            raise RuntimeError("no board fetched yet")  # handler 502s; page retries
+        return {
+            "updated": _LAST["at"].strftime("updated %-I:%M %p"),
+            "age_sec": max(0, int((now - _LAST["at"]).total_seconds())),
+            "refresh": REFRESH_SECONDS,
+            "panel": list(PANEL_SIZE),
+            "rows": _LAST["rows"],
+        }
 
 
 class Handler(BaseHTTPRequestHandler):
