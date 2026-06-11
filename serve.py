@@ -23,7 +23,7 @@ import os
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from amtrak_sac import get_board
+from amtrak_sac import get_board, PACIFIC
 from render_board import render, row_view, PANEL_SIZE, MAX_ROWS
 
 PORT = 8770
@@ -35,7 +35,7 @@ PAGE_PATH = os.path.join(HERE, "web", "board.html")
 
 
 def board_json() -> dict:
-    now = datetime.now().astimezone()
+    now = datetime.now(PACIFIC)
     rows = [row_view(s) for s in get_board()[:MAX_ROWS]]
     return {
         "updated": now.strftime("updated %-I:%M %p"),

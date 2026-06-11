@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import gtfs_sched
+from gtfs_sched import PACIFIC  # Sacramento is Pacific; force it so displayed
+                               # times + date keys are correct on any Pi tz
 
 STATION = "SAC"
 MAX_HOURS = 24  # only show departures within this many hours from now
@@ -148,7 +150,7 @@ def build_board(raw: dict, now: datetime | None = None) -> list[Stop]:
     seen: set = set()
     deduped: list[Stop] = []
     for s in board:
-        key = (s.train_num, s.dest, s.sch.astimezone().date())
+        key = (s.train_num, s.dest, s.sch.astimezone(PACIFIC).date())
         if key in seen:
             continue
         seen.add(key)
@@ -182,7 +184,7 @@ def _gtfs_realtime_index(raw: dict) -> dict:
                 sch, est = _parse(s.get("schDep")), _parse(s.get("dep"))
                 if sch and est:
                     delay = round((est - sch).total_seconds() / 60)
-                    idx[(num, sch.astimezone().date())] = (
+                    idx[(num, sch.astimezone(PACIFIC).date())] = (
                         delay, s.get("status", "") or "", est)
                 break
     return idx
@@ -196,7 +198,7 @@ def _gtfs_board(raw: dict, now: datetime) -> list[Stop]:
     for operator in gtfs_sched.OPERATORS:
         for num, route, dest, sched in gtfs_sched.scheduled_departures(
                 now, MAX_HOURS, operator):
-            delay, status, est = rt.get((num, sched.astimezone().date()),
+            delay, status, est = rt.get((num, sched.astimezone(PACIFIC).date()),
                                         (None, "Scheduled", None))
             stops.append(Stop(num, route, dest, status, sched, est, delay))
     return stops
@@ -225,7 +227,7 @@ def get_board() -> list[Stop]:
     seen: set = set()
     out: list[Stop] = []
     for s in board:
-        key = (s.train_num, s.sch.astimezone().date())
+        key = (s.train_num, s.sch.astimezone(PACIFIC).date())
         if key in seen:
             continue
         seen.add(key)
@@ -235,7 +237,7 @@ def get_board() -> list[Stop]:
 
 if __name__ == "__main__":
     for stop in get_board():
-        local = (stop.est or stop.sch).astimezone()
+        local = (stop.est or stop.sch).astimezone(PACIFIC)
         tag = (f"+{stop.delay_min}m LATE" if stop.is_late
                else "on time" if stop.delay_min is not None else "—")
         print(f"{local:%H:%M}  #{stop.train_num:<4} {stop.route:<18} "

@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
-from amtrak_sac import Stop
+from amtrak_sac import Stop, PACIFIC
 
 # Waveshare 7.5" v2 is 800x480. Change this to match your panel.
 PANEL_SIZE = (800, 480)
@@ -47,7 +47,7 @@ def _font(size: int) -> ImageFont.FreeTypeFont:
 
 def _clock(dt) -> str:
     """12-hour local time like '3:05P' (no leading zero, compact upper am/pm)."""
-    return dt.astimezone().strftime("%-I:%M%p").upper()[:-1]
+    return dt.astimezone(PACIFIC).strftime("%-I:%M%p").upper()[:-1]
 
 
 def row_view(stop: Stop) -> dict:
@@ -77,7 +77,7 @@ COL_TIME, COL_ROUTE, COL_TO = 16, 190, 448
 
 
 def render(board: list[Stop], now: datetime | None = None) -> Image.Image:
-    now = now or datetime.now().astimezone()
+    now = now or datetime.now(PACIFIC)
     w, h = PANEL_SIZE
     img = Image.new("RGB", PANEL_SIZE, BLACK)
     d = ImageDraw.Draw(img)
