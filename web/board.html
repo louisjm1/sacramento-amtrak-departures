@@ -264,25 +264,46 @@ canvas.addEventListener("pointerdown", () => {
 let _lastRows = [];
 function lastRows() { return _lastRows; }
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function fetchData() {
+  const r = await fetch("/data.json", { cache: "no-store" });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+function applyData(d) {
+  updatedText = d.updated;
+  _lastRows = d.rows;
+  const key = JSON.stringify(d.rows);
+  if (key !== lastRowsKey) { lastRowsKey = key; startAnimation(d.rows); }
+  else if (!animating) { drawChrome(); frameStatic(); }
+}
+
 async function loop() {
   computeSeam();   // hinge position from the now-loaded board font
-  const data = await (await fetch("/data.json", { cache: "no-store" })).json();
-  updatedText = data.updated;
-  _lastRows = data.rows;
-  lastRowsKey = JSON.stringify(data.rows);
-  startAnimation(data.rows);            // initial reveal: everything flaps in
+  // Wait for the server — on boot Chromium can start before serve.py is up.
+  let data = null;
+  while (!data) {
+    try { data = await fetchData(); }
+    catch (e) { await sleep(2000); }
+  }
+  applyData(data);
   const interval = (data.refresh || 120) * 1000;
+  // Poll forever; a failed poll just keeps the last board until the next one.
   setInterval(async () => {
-    const d = await (await fetch("/data.json", { cache: "no-store" })).json();
-    updatedText = d.updated; _lastRows = d.rows;
-    const key = JSON.stringify(d.rows);
-    if (key !== lastRowsKey) { lastRowsKey = key; startAnimation(d.rows); }
-    else if (!animating) { drawChrome(); frameStatic(); }
+    try { applyData(await fetchData()); } catch (e) { /* keep last frame */ }
   }, interval);
 }
 
-document.fonts.load(ROW_SIZE + "px " + FONT).then(() =>
-  document.fonts.ready).then(loop).catch(loop);
+// Start once the board font is ready; retry the whole thing if anything throws.
+function boot() {
+  document.fonts.load(ROW_SIZE + "px " + FONT)
+    .then(() => document.fonts.ready)
+    .then(loop)
+    .catch(() => { setTimeout(boot, 2000); });
+}
+boot();
 </script>
 </body>
 </html>

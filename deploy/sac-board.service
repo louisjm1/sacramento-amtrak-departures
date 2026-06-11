@@ -1,0 +1,16 @@
+[Unit]
+# Background data server for the departures board. Installed as a systemd *user*
+# service by deploy/setup.sh (which fills in the %REPO% / %ENVFILE% paths).
+Description=Sacramento Departures board data server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=%REPO%
+EnvironmentFile=%ENVFILE%
+ExecStart=%REPO%/.venv/bin/python serve.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

@@ -80,16 +80,23 @@ The Hosyond is a driver-free DSI panel: connect the ribbon to the Pi's
 **DISPLAY/DSI** port (+ the USB-touch lead) and it works as the Pi's 800x480
 screen — no driver install.
 
-**Recommended — animated, via browser kiosk** (the animation runs in the browser):
+**Permanent kiosk (recommended)** — boots straight to the fullscreen animated
+board, no app to open, survives reboots/power cuts:
 
-1. Copy this repo to the Pi, `pip install -r requirements.txt`, `export TRANSIT_511_TOKEN=...`.
-2. Run `python3 serve.py` (e.g. as a systemd service).
-3. Launch the display: `chromium-browser --kiosk --app=http://localhost:8770`
-   (add both to autostart). The touchscreen lets you tap to replay the flaps.
+```sh
+git clone https://github.com/louisjm1/sacramento-amtrak-departures.git ~/sacramento-amtrak-departures
+cd ~/sacramento-amtrak-departures
+bash deploy/setup.sh        # prompts for your 511 token, wires up everything
+sudo reboot
+```
 
-**Alternative — static, no browser:** `python3 board.py` draws the board
-fullscreen via pygame (no animation). Autostart it the same way. If pygame won't
-go fullscreen on Pi 5/Wayland, try `SDL_VIDEODRIVER=wayland`.
+This installs `serve.py` as a boot-on, auto-restarting service and a Chromium
+`--kiosk` autostart entry. Details, commands, and troubleshooting:
+[deploy/README.md](deploy/README.md).
+
+**Static, no browser (alternative):** `python3 board.py` draws the board
+fullscreen via pygame (no flap animation). If it won't go fullscreen on
+Pi 5/Wayland, try `SDL_VIDEODRIVER=wayland`.
 
 ## Tuning
 
