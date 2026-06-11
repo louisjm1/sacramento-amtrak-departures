@@ -10,14 +10,60 @@
     src: url("/font.ttf") format("truetype");
     font-weight: normal; font-display: block;
   }
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+    font-family: "ChakraPetch", system-ui, sans-serif; }
   body { display: flex; align-items: center; justify-content: center; }
   /* Drawing buffer is 800x480; CSS scales it to fit the screen, aspect kept. */
   canvas { background: #000; image-rendering: auto; }
+
+  /* 511-key prompt overlay (amber-on-black, touch-friendly) */
+  .overlay { position: fixed; inset: 0; z-index: 10; display: flex;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.88); }
+  .overlay[hidden] { display: none; }
+  .modal { width: 660px; max-width: 94vw; color: #FFC800; text-transform: uppercase;
+    border: 2px solid #FFC800; border-radius: 10px; padding: 20px 22px; background: #000; }
+  .mtitle { font-size: 30px; font-weight: 700; letter-spacing: .5px; }
+  .msub { font-size: 15px; color: #c79e12; margin: 8px 0 14px; line-height: 1.35;
+    text-transform: none; }
+  .keyinput { width: 100%; box-sizing: border-box; font-family: inherit;
+    font-size: 22px; letter-spacing: 2px; color: #FFC800; background: #1a1407;
+    border: 2px solid #FFC800; border-radius: 6px; padding: 10px 12px; outline: none; }
+  .keyinput::placeholder { color: #7a6310; letter-spacing: 1px; }
+  .keypad { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin: 12px 0; }
+  .kkey { font-family: inherit; font-size: 20px; color: #FFC800; background: #000;
+    border: 2px solid #6b5408; border-radius: 6px; padding: 8px 0; cursor: pointer; }
+  .kkey:active { background: #FFC800; color: #000; }
+  .kkey.wide { grid-column: span 2; }
+  .kstatus { font-size: 15px; min-height: 20px; text-transform: none; color: #FFC800; }
+  .mbtns { display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px; }
+  .btn { font-family: inherit; font-size: 20px; font-weight: 700; padding: 10px 22px;
+    border-radius: 6px; cursor: pointer; border: 2px solid #FFC800;
+    background: #FFC800; color: #000; }
+  .btn.ghost { background: #000; color: #FFC800; }
 </style>
 </head>
 <body>
 <canvas id="board" width="800" height="480"></canvas>
+
+<!-- Shown when no 511 key is stored: offer to add one, or decline. -->
+<div id="keymodal" class="overlay" hidden>
+  <div class="modal">
+    <div class="mtitle">Add a 511 key?</div>
+    <div class="msub">A free 511.org key unlocks the full Capitol&nbsp;Corridor &amp;
+      San&nbsp;Joaquins schedules. Without it, the board still works but shows only
+      trains Amtrak is actively tracking. Get a key at 511.org/open-data/token.</div>
+    <input id="keyinput" class="keyinput" type="text" inputmode="text"
+      autocomplete="off" autocapitalize="off" spellcheck="false"
+      placeholder="paste or tap your key">
+    <div id="keypad" class="keypad"></div>
+    <div id="keystatus" class="kstatus"></div>
+    <div class="mbtns">
+      <button id="declinebtn" class="btn ghost">Not now</button>
+      <button id="savebtn" class="btn">Save key</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ---- Look: must mirror render_board.py ------------------------------------
 const W = 800, H = 480;
@@ -292,10 +338,64 @@ function applyData(d) {
   updatedText = d.updated;
   updatedAge = d.age_sec || 0;
   _lastRows = d.rows;
-  const key = JSON.stringify(d.rows);
-  if (key !== lastRowsKey) { lastRowsKey = key; startAnimation(d.rows); }
+  const rk = JSON.stringify(d.rows);
+  if (rk !== lastRowsKey) { lastRowsKey = rk; startAnimation(d.rows); }
   else if (!animating) { drawChrome(); frameStatic(); }
+
+  // No 511 key stored? Offer to add one (once per app-open; dismiss persists
+  // for the session). If a key appears (entered or set elsewhere), close it.
+  if (d.has_key === false && !keyPromptDismissed && keymodal.hidden) showKeyPrompt();
+  else if (d.has_key && !keymodal.hidden) hideKeyPrompt();
 }
+
+// ---- 511-key prompt -------------------------------------------------------
+const keymodal = document.getElementById("keymodal");
+const keyinput = document.getElementById("keyinput");
+const keystatus = document.getElementById("keystatus");
+let keyPromptDismissed = false;
+
+(function buildKeypad() {
+  const pad = document.getElementById("keypad");
+  const add = (label, fn, wide) => {
+    const b = document.createElement("button");
+    b.className = "kkey" + (wide ? " wide" : "");
+    b.textContent = label;
+    b.addEventListener("click", fn);
+    pad.appendChild(b);
+  };
+  for (const ch of "1234567890abcdef-") add(ch, () => { keyinput.value += ch; });
+  add("⌫", () => { keyinput.value = keyinput.value.slice(0, -1); });
+  add("Clear", () => { keyinput.value = ""; }, true);
+})();
+
+function showKeyPrompt() {
+  keyinput.value = ""; keystatus.textContent = "";
+  keymodal.hidden = false;
+  keyinput.focus();
+}
+function hideKeyPrompt() { keymodal.hidden = true; }
+
+document.getElementById("declinebtn").addEventListener("click", () => {
+  keyPromptDismissed = true; hideKeyPrompt();
+});
+document.getElementById("savebtn").addEventListener("click", async () => {
+  const key = keyinput.value.trim();
+  if (!key) { keystatus.textContent = "Enter a key first."; return; }
+  keystatus.textContent = "Saving…";
+  try {
+    const r = await fetch("/set-key", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key }),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    keyPromptDismissed = true;
+    keystatus.textContent = "Saved! Schedules will appear within ~2 min.";
+    setTimeout(() => fetchData().then(applyData).catch(() => {}), 1500);
+    setTimeout(hideKeyPrompt, 2600);
+  } catch (e) {
+    keystatus.textContent = "Couldn't save — try again.";
+  }
+});
 
 // First-boot placeholder so the panel isn't blank while we wait for the server.
 function drawConnecting() {

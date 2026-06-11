@@ -38,6 +38,12 @@ falls back to `~/dev/bay-area-transit-map/.env`). Get a free token at
 export TRANSIT_511_TOKEN=your-token-here
 ```
 
+**No key? The app will ask.** If no token is configured, the board still runs
+(live-tracked trains only) and shows an on-screen "Add a 511 key?" prompt with a
+touch keypad and a "Not now" option. Saving applies the key immediately and
+writes it to `~/.config/sac-board/env` so it persists across reboots — no
+terminal needed.
+
 ## Files
 
 | File | Role |

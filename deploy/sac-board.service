@@ -7,7 +7,9 @@ Wants=network-online.target
 
 [Service]
 WorkingDirectory=%REPO%
-EnvironmentFile=%ENVFILE%
+# Leading "-" = optional: the service still starts with no key file yet, so the
+# app can show its "add a 511 key?" prompt and write the file itself.
+EnvironmentFile=-%ENVFILE%
 ExecStart=%REPO%/.venv/bin/python serve.py
 Restart=always
 RestartSec=3

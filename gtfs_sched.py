@@ -53,6 +53,15 @@ def _token() -> str:
     raise RuntimeError("Set TRANSIT_511_TOKEN (511.org API token)")
 
 
+def has_token() -> bool:
+    """True if a 511 token is configured (non-raising; used to decide whether
+    to prompt the user for one)."""
+    try:
+        return bool(_token())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def ensure_zip(operator: str = "AM") -> str:
     """Return path to a fresh-enough cached GTFS zip, downloading if needed."""
     os.makedirs(CACHE_DIR, exist_ok=True)
