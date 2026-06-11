@@ -6,7 +6,7 @@ set -u
 URL="http://localhost:8770"
 
 # Wait for serve.py to be answering before opening the browser.
-until curl -sf "$URL/data.json" >/dev/null 2>&1; do sleep 1; done
+until curl -sf -o /dev/null "$URL/"; do sleep 1; done
 
 # Chromium is "chromium-browser" on Pi OS, "chromium" on some images.
 CHROME="$(command -v chromium-browser || command -v chromium)"

@@ -29,6 +29,23 @@ sudo reboot
 | `kiosk.sh`          | waits for the server, then launches Chromium `--kiosk` |
 | autostart `.desktop`| starts `kiosk.sh` at desktop login (auto-login is on by default) |
 
+## Desktop app icon (click to launch)
+
+Prefer launching it yourself instead of (or alongside) auto-boot? Install a
+clickable desktop icon:
+
+```sh
+bash deploy/install-desktop-app.sh
+```
+
+A **Sacramento Departures** icon appears on the desktop and in the app menu.
+Double-click it to open the board fullscreen — `deploy/launch.sh` starts the
+data server if it isn't already running, then opens Chromium in kiosk mode.
+(The first double-click may ask to "Execute" — choose Execute.)
+
+This pairs well with turning auto-boot off (see below): the board is there when
+you click it, not forced on every boot.
+
 ## Handy commands
 
 ```sh

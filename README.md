@@ -104,6 +104,10 @@ This installs `serve.py` as a boot-on, auto-restarting service and a Chromium
 fullscreen via pygame (no flap animation). If it won't go fullscreen on
 Pi 5/Wayland, try `SDL_VIDEODRIVER=wayland`.
 
+**Click-to-launch desktop icon:** prefer opening it yourself? Run
+`bash deploy/install-desktop-app.sh` for a "Sacramento Departures" desktop icon
+([deploy/README.md](deploy/README.md)).
+
 ## Tuning
 
 - **Resolution / colors** — `PANEL_SIZE` (800x480) and the `BLACK`/`YELLOW`/`RED`
