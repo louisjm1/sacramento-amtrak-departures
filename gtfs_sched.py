@@ -127,9 +127,13 @@ def _clean_dest(headsign: str) -> str:
     return headsign.split("-")[0].strip()
 
 
-def scheduled_departures(now: datetime, hours: int, operator: str = "AM"):
+def scheduled_departures(now: datetime, hours: int, operator: str = "AM",
+                         past_grace: timedelta = timedelta(0)):
     """List of (train_num:int, route:str, dest:str, sched:datetime) for SAC
-    departures within [now, now+hours]. SAC arrivals/terminations are excluded.
+    departures within [now - past_grace, now + hours]. SAC arrivals/terminations
+    are excluded. `past_grace` lets the caller also see recently-passed scheduled
+    times so it can keep trains that are running late (their revised time hasn't
+    come yet); the caller filters those by the live delay.
     """
     z = zipfile.ZipFile(ensure_zip(operator))
     route = OPERATORS[operator]["route"]
@@ -152,6 +156,7 @@ def scheduled_departures(now: datetime, hours: int, operator: str = "AM"):
 
     active = _service_index(z)
     horizon = now + timedelta(hours=hours)
+    earliest = now - past_grace
     local_now = now.astimezone(PACIFIC)
     out = []
     # A <=24h window touches at most yesterday..tomorrow once after-midnight
@@ -171,7 +176,7 @@ def scheduled_departures(now: datetime, hours: int, operator: str = "AM"):
             if pickup == "1" or not dep_time:
                 continue  # drop-off only / no departure
             sched = midnight + timedelta(seconds=_gtfs_secs(dep_time))
-            if sched < now or sched > horizon:
+            if sched < earliest or sched > horizon:
                 continue
             num = int(re.sub(r"\D", "", trip_id) or 0)
             out.append((num, route, _clean_dest(trip.get("trip_headsign", "")), sched))

@@ -190,16 +190,29 @@ def _gtfs_realtime_index(raw: dict) -> dict:
     return idx
 
 
+# How far past its scheduled time a train may stay while we wait to see whether
+# it's running late (covers any realistic delay; on-time trains drop at sched).
+_LATE_GRACE = timedelta(hours=6)
+
+
 def _gtfs_board(raw: dict, now: datetime) -> list[Stop]:
     """All scheduled SAC departures for the GTFS routes in the window, with live
-    Amtraker delays overlaid where a train is being tracked."""
+    Amtraker delays overlaid where a train is being tracked. A train that is
+    running late stays on the board until its REVISED departure time, not its
+    scheduled one."""
     rt = _gtfs_realtime_index(raw)
+    horizon = now + timedelta(hours=MAX_HOURS)
     stops: list[Stop] = []
     for operator in gtfs_sched.OPERATORS:
         for num, route, dest, sched in gtfs_sched.scheduled_departures(
-                now, MAX_HOURS, operator):
+                now, MAX_HOURS, operator, past_grace=_LATE_GRACE):
             delay, status, est = rt.get((num, sched.astimezone(PACIFIC).date()),
                                         (None, "Scheduled", None))
+            # Effective departure = revised time if the train is tracked, else
+            # scheduled. Drop only once it has actually left (or is out of range).
+            eff = est or sched
+            if status.lower() == "departed" or eff < now or eff > horizon:
+                continue
             stops.append(Stop(num, route, dest, status, sched, est, delay))
     return stops
 
