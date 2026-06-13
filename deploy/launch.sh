@@ -26,8 +26,10 @@ if [ -z "$CHROME" ]; then
   exit 1
 fi
 
+# --password-store=basic stops Chromium asking for the Pi login (keyring) password.
 exec "$CHROME" \
   --kiosk "$URL" \
+  --password-store=basic \
   --noerrdialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \

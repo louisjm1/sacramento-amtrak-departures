@@ -18,8 +18,10 @@ if [ -f "$PREFS" ]; then
   sed -i 's/"exit_type":"[^"]*"/"exit_type":"Normal"/; s/"exited_cleanly":false/"exited_cleanly":true/' "$PREFS" || true
 fi
 
+# --password-store=basic stops Chromium asking for the Pi login (keyring) password.
 exec "$CHROME" \
   --kiosk "$URL" \
+  --password-store=basic \
   --noerrdialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \
