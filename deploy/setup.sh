@@ -48,6 +48,9 @@ EOF
 echo "==> Disabling screen blanking"
 sudo raspi-config nonint do_blanking 1 || true
 
+echo "==> Stopping the Chromium keyring/password prompt"
+bash "$REPO/deploy/disable-keyring.sh" || true
+
 echo
 echo "Done. Reboot to launch the board:  sudo reboot"
 echo "  - Server status:   systemctl --user status sac-board"

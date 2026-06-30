@@ -46,6 +46,19 @@ data server if it isn't already running, then opens Chromium in kiosk mode.
 This pairs well with turning auto-boot off (see below): the board is there when
 you click it, not forced on every boot.
 
+## Chromium asks for a keyring / Pi password on launch?
+
+Chromium tries to unlock the system keyring when it starts. The launch scripts
+already pass `--password-store=basic` so Chromium won't use it, but if a locked
+keyring already exists you may still get one prompt. Clear it once (safe — the
+keyrings are renamed to `*.bak`, not deleted):
+
+```sh
+bash deploy/disable-keyring.sh
+```
+
+`setup.sh` runs this for you on a fresh install.
+
 ## Handy commands
 
 ```sh
